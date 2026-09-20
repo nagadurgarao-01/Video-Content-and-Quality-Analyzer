@@ -1,10 +1,10 @@
-# Video Content and Quality Analyzer 🎥📊
+# Video Content and Quality Analyzer 
 
 A data processing and feature engineering framework designed to benchmark, analyze, and quantify the educational quality and pedagogical structure of AI and Machine Learning instructional videos.
 
 ---
 
-## 📌 Project Overview
+##  Project Overview
 
 Online AI/ML educational content varies widely in instructional pedagogy, technical depth, visual communication, and production quality. This project provides an end-to-end data pipeline to systematically analyze a benchmark dataset of **205 curated AI & ML videos** from leading creators (such as *3Blue1Brown*, *StatQuest with Josh Starmer*, and more).
 
@@ -14,7 +14,7 @@ The pipeline extracts qualitative attributes, normalizes metadata (durations, vi
 
 
 
-## 🔍 Key Features & Derived Metrics
+## Key Features & Derived Metrics
 
 | Feature Name | Type | Description |
 | :--- | :--- | :--- |
@@ -38,7 +38,7 @@ The pipeline extracts qualitative attributes, normalizes metadata (durations, vi
 
 ---
 
-## 🎯 Pedagogical Quality Scoring Framework
+## Pedagogical Quality Scoring Framework
 
 A dedicated evaluation template (`data/processed/video_annotations.csv`) is included to evaluate instructional videos across **7 fundamental pillars**:
 
