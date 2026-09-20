@@ -54,4 +54,21 @@ $$ \text{Quality Score} = \left( \frac{1}{7} \sum_{i=1}^{7} \text{Dimension}_i \
 
 *(Normalized to a 0–100 scale)*
 
+## Analysis Pipeline
+
+```text
+Raw Video Dataset
+        ↓
+Data Cleaning
+        ↓
+Feature Engineering
+        ↓
+Text Embeddings
+        ↓
+Automatic Content Indicators
+        ↓
+Semantic Clustering
+        ↓
+Video Content Analysis
+
 
