@@ -8,13 +8,20 @@ import pandas as pd
 from sklearn.preprocessing import normalize, MinMaxScaler
 
 
+# ============================================================
 # Allow imports from src/
+# ============================================================
+
 sys.path.append(str(Path(__file__).resolve().parent))
 
 from preprocessing import preprocess_dataframe
 from features import create_features
 from embeddings import load_embedding_model, generate_embeddings
 
+
+# ============================================================
+# Paths
+# ============================================================
 
 MODEL_PATH = "models/kmeans_model.joblib"
 
@@ -23,13 +30,25 @@ REFERENCE_FEATURES_PATH = (
 )
 
 
+# ============================================================
+# Load K-Means model
+# ============================================================
+
 def load_kmeans_model():
-    """Load the existing trained K-Means model."""
+    """
+    Load the existing trained K-Means model.
+    """
     return joblib.load(MODEL_PATH)
 
 
+# ============================================================
+# Load reference dataset
+# ============================================================
+
 def load_reference_data():
-    """Load the current reference dataset."""
+    """
+    Load the reference dataset used for Phase 6 analysis.
+    """
 
     path = Path(REFERENCE_FEATURES_PATH)
 
@@ -41,8 +60,14 @@ def load_reference_data():
     return pd.read_csv(path)
 
 
+# ============================================================
+# Cluster assignment
+# ============================================================
+
 def assign_cluster(embedding, model):
-    """Assign a new video to an existing semantic cluster."""
+    """
+    Assign a new video to an existing semantic cluster.
+    """
 
     normalized_embedding = normalize(
         embedding,
@@ -56,9 +81,22 @@ def assign_cluster(embedding, model):
     return int(cluster)
 
 
-def calculate_description_features(df):
+# ============================================================
+# Description features
+# ============================================================
+
+def calculate_description_features(
+    df,
+    reference_df=None
+):
     """
-    Reproduce the Phase 6 description-length indicators.
+    Calculate Phase 6 description richness.
+
+    When reference_df is provided, MinMaxScaler is fitted
+    on the reference dataset and then applied to df.
+
+    This prevents a single new video from being normalized
+    against itself.
     """
 
     df = df.copy()
@@ -71,16 +109,23 @@ def calculate_description_features(df):
         "takeaway_richness_raw": "Creator_Takeaways",
     }
 
+    # --------------------------------------------------------
+    # Calculate raw description lengths for current dataframe
+    # --------------------------------------------------------
+
     for new_column, source_column in text_columns.items():
 
         if source_column in df.columns:
+
             df[new_column] = (
                 df[source_column]
                 .fillna("")
                 .astype(str)
                 .str.len()
             )
+
         else:
+
             df[new_column] = 0
 
     raw_columns = [
@@ -91,12 +136,6 @@ def calculate_description_features(df):
         "takeaway_richness_raw",
     ]
 
-    scaler = MinMaxScaler()
-
-    normalized = scaler.fit_transform(
-        df[raw_columns]
-    )
-
     normalized_columns = [
         "example_support",
         "analogy_support",
@@ -105,13 +144,66 @@ def calculate_description_features(df):
         "takeaway_richness",
     ]
 
-    normalized_df = pd.DataFrame(
-        normalized,
-        columns=normalized_columns,
-        index=df.index
-    )
+    # --------------------------------------------------------
+    # Fit scaler using reference dataset
+    # --------------------------------------------------------
 
-    df[normalized_columns] = normalized_df
+    if reference_df is not None:
+
+        reference_df = reference_df.copy()
+
+        for new_column, source_column in text_columns.items():
+
+            if source_column in reference_df.columns:
+
+                reference_df[new_column] = (
+                    reference_df[source_column]
+                    .fillna("")
+                    .astype(str)
+                    .str.len()
+                )
+
+            else:
+
+                reference_df[new_column] = 0
+
+        scaler = MinMaxScaler()
+
+        scaler.fit(
+            reference_df[raw_columns]
+        )
+
+        normalized = scaler.transform(
+            df[raw_columns]
+        )
+
+        normalized = np.clip(
+            normalized,
+            0.0,
+            1.0
+        )
+
+    # --------------------------------------------------------
+    # Fallback: fit on current dataframe
+    # --------------------------------------------------------
+
+    else:
+
+        scaler = MinMaxScaler()
+
+        normalized = scaler.fit_transform(
+            df[raw_columns]
+        )
+
+    # --------------------------------------------------------
+    # Store normalized features
+    # --------------------------------------------------------
+
+    df[normalized_columns] = normalized
+
+    # --------------------------------------------------------
+    # Explanation description richness
+    # --------------------------------------------------------
 
     df["explanation_description_richness"] = (
         df[normalized_columns]
@@ -121,8 +213,14 @@ def calculate_description_features(df):
     return df
 
 
+# ============================================================
+# Content coverage
+# ============================================================
+
 def calculate_content_coverage(df):
-    """Calculate the Phase 6 content coverage indicator."""
+    """
+    Calculate the Phase 6 content coverage indicator.
+    """
 
     coverage_columns = [
         "has_visual",
@@ -141,13 +239,23 @@ def calculate_content_coverage(df):
 
     df = df.copy()
 
-    df["content_coverage"] = (
-        df[existing_columns]
-        .mean(axis=1)
-    )
+    if len(existing_columns) == 0:
+
+        df["content_coverage"] = 0.0
+
+    else:
+
+        df["content_coverage"] = (
+            df[existing_columns]
+            .mean(axis=1)
+        )
 
     return df
 
+
+# ============================================================
+# Technical terminology
+# ============================================================
 
 def count_technical_terms(text):
     """
@@ -219,12 +327,26 @@ def count_technical_terms(text):
     return count
 
 
-def calculate_technical_depth(df):
+# ============================================================
+# Technical depth
+# ============================================================
+
+def calculate_technical_depth(
+    df,
+    reference_df=None
+):
     """
     Calculate the Phase 6 technical terminology indicator.
+
+    When reference_df is provided, normalization is based
+    on the reference dataset.
     """
 
     df = df.copy()
+
+    # --------------------------------------------------------
+    # Count technical terms in current dataframe
+    # --------------------------------------------------------
 
     df["technical_term_count"] = (
         df["combined_text"]
@@ -232,35 +354,99 @@ def calculate_technical_depth(df):
         .apply(count_technical_terms)
     )
 
-    scaler = MinMaxScaler()
+    # --------------------------------------------------------
+    # Fit scaler using reference dataset
+    # --------------------------------------------------------
 
-    df["technical_depth"] = (
-        scaler.fit_transform(
-            df[["technical_term_count"]]
+    if reference_df is not None:
+
+        reference_df = reference_df.copy()
+
+        reference_df["technical_term_count"] = (
+            reference_df["combined_text"]
+            .fillna("")
+            .apply(count_technical_terms)
         )
-        .flatten()
+
+        scaler = MinMaxScaler()
+
+        scaler.fit(
+            reference_df[
+                ["technical_term_count"]
+            ]
+        )
+
+        df["technical_depth"] = (
+            scaler.transform(
+                df[
+                    ["technical_term_count"]
+                ]
+            )
+            .flatten()
+        )
+
+    # --------------------------------------------------------
+    # Fallback
+    # --------------------------------------------------------
+
+    else:
+
+        scaler = MinMaxScaler()
+
+        df["technical_depth"] = (
+            scaler.fit_transform(
+                df[
+                    ["technical_term_count"]
+                ]
+            )
+            .flatten()
+        )
+
+    return df
+
+
+# ============================================================
+# Phase 6 indicators
+# ============================================================
+
+def calculate_phase6_indicators(
+    df,
+    reference_df=None
+):
+    """
+    Calculate all Phase 6 indicators.
+    """
+
+    df = df.copy()
+
+    # Explanation richness
+    df = calculate_description_features(
+        df,
+        reference_df
+    )
+
+    # Content coverage
+    df = calculate_content_coverage(
+        df
+    )
+
+    # Technical depth
+    df = calculate_technical_depth(
+        df,
+        reference_df
     )
 
     return df
 
 
-def calculate_phase6_indicators(reference_df):
-    """
-    Calculate all Phase 6 indicators for the reference dataset.
-    """
+# ============================================================
+# Percentile calculation
+# ============================================================
 
-    df = reference_df.copy()
-
-    df = calculate_description_features(df)
-
-    df = calculate_content_coverage(df)
-
-    df = calculate_technical_depth(df)
-
-    return df
-
-
-def calculate_percentile(value, reference_values):
+def calculate_percentile(
+    value,
+    reference_values
+):
     """
     Calculate percentile relative to the reference dataset.
     """
@@ -284,29 +470,39 @@ def calculate_percentile(value, reference_values):
     )
 
 
+# ============================================================
+# Analyze one video
+# ============================================================
+
 def analyze_video(video_data):
     """
     Analyze one new video using the existing
     500-video reference dataset.
     """
 
-    # ----------------------------------------
-    # Phase 1
-    # ----------------------------------------
+    # ========================================================
+    # Phase 1: Preprocessing
+    # ========================================================
 
-    df = pd.DataFrame([video_data])
+    df = pd.DataFrame(
+        [video_data]
+    )
 
-    df = preprocess_dataframe(df)
+    df = preprocess_dataframe(
+        df
+    )
 
-    # ----------------------------------------
-    # Phase 2
-    # ----------------------------------------
+    # ========================================================
+    # Phase 2: Feature engineering
+    # ========================================================
 
-    df = create_features(df)
+    df = create_features(
+        df
+    )
 
-    # ----------------------------------------
-    # Phase 3
-    # ----------------------------------------
+    # ========================================================
+    # Phase 3: Embedding
+    # ========================================================
 
     embedding_model = load_embedding_model()
 
@@ -315,9 +511,9 @@ def analyze_video(video_data):
         embedding_model
     )
 
-    # ----------------------------------------
-    # Phase 5
-    # ----------------------------------------
+    # ========================================================
+    # Phase 5: Cluster prediction
+    # ========================================================
 
     kmeans_model = load_kmeans_model()
 
@@ -326,11 +522,17 @@ def analyze_video(video_data):
         kmeans_model
     )
 
-    # ----------------------------------------
-    # Phase 6 reference dataset
-    # ----------------------------------------
+    # ========================================================
+    # Phase 6: Load reference dataset
+    # ========================================================
 
     reference_df = load_reference_data()
+
+    # Calculate indicators for the reference dataset.
+    #
+    # Since reference_df is being passed to itself,
+    # the scalers are fitted using the complete reference
+    # distribution.
 
     reference_analysis = (
         calculate_phase6_indicators(
@@ -338,15 +540,30 @@ def analyze_video(video_data):
         )
     )
 
-    # ----------------------------------------
-    # Phase 6 indicators for new video
-    # ----------------------------------------
+    # ========================================================
+    # Phase 6: Calculate indicators for new video
+    #
+    # IMPORTANT:
+    # The reference dataset is supplied here so that the
+    # new video's values are transformed using the same
+    # reference distribution.
+    # ========================================================
 
     new_video_analysis = (
-        calculate_phase6_indicators(df)
+        calculate_phase6_indicators(
+            df,
+            reference_df
+        )
     )
 
-    new_video = new_video_analysis.iloc[0]
+    new_video = (
+        new_video_analysis
+        .iloc[0]
+    )
+
+    # ========================================================
+    # Extract indicators
+    # ========================================================
 
     richness = float(
         new_video[
@@ -355,43 +572,54 @@ def analyze_video(video_data):
     )
 
     coverage = float(
-        new_video["content_coverage"]
+        new_video[
+            "content_coverage"
+        ]
     )
 
     technical_depth = float(
-        new_video["technical_depth"]
-    )
-
-    # ----------------------------------------
-    # Percentiles
-    # ----------------------------------------
-
-    richness_percentile = calculate_percentile(
-        richness,
-        reference_analysis[
-            "explanation_description_richness"
-        ].values
-    )
-
-    coverage_percentile = calculate_percentile(
-        coverage,
-        reference_analysis[
-            "content_coverage"
-        ].values
-    )
-
-    technical_percentile = calculate_percentile(
-        technical_depth,
-        reference_analysis[
+        new_video[
             "technical_depth"
-        ].values
+        ]
     )
 
-    # ----------------------------------------
+    # ========================================================
+    # Percentiles
+    # ========================================================
+
+    richness_percentile = (
+        calculate_percentile(
+            richness,
+            reference_analysis[
+                "explanation_description_richness"
+            ].values
+        )
+    )
+
+    coverage_percentile = (
+        calculate_percentile(
+            coverage,
+            reference_analysis[
+                "content_coverage"
+            ].values
+        )
+    )
+
+    technical_percentile = (
+        calculate_percentile(
+            technical_depth,
+            reference_analysis[
+                "technical_depth"
+            ].values
+        )
+    )
+
+    # ========================================================
     # Final result
-    # ----------------------------------------
+    # ========================================================
 
     result = {
+
         "title": new_video.get(
             "Title",
             ""
@@ -469,33 +697,43 @@ def analyze_video(video_data):
             )
         ),
 
-        "explanation_description_richness":
-            richness,
+        "explanation_description_richness": (
+            richness
+        ),
 
-        "content_coverage":
-            coverage,
+        "content_coverage": (
+            coverage
+        ),
 
-        "technical_depth":
-            technical_depth,
+        "technical_depth": (
+            technical_depth
+        ),
 
-        "richness_percentile":
-            richness_percentile,
+        "richness_percentile": (
+            richness_percentile
+        ),
 
-        "coverage_percentile":
-            coverage_percentile,
+        "coverage_percentile": (
+            coverage_percentile
+        ),
 
-        "technical_percentile":
-            technical_percentile,
+        "technical_percentile": (
+            technical_percentile
+        ),
     }
 
     return result
 
 
+# ============================================================
+# Test
+# ============================================================
+
 if __name__ == "__main__":
 
-    # ----------------------------------------
+    # --------------------------------------------------------
     # Test video
-    # ----------------------------------------
+    # --------------------------------------------------------
 
     test_video = {
 
@@ -541,15 +779,24 @@ if __name__ == "__main__":
             "Understand neural networks, layers and training"
     }
 
+    # --------------------------------------------------------
+    # Run analysis
+    # --------------------------------------------------------
+
     result = analyze_video(
         test_video
     )
+
+    # --------------------------------------------------------
+    # Display result
+    # --------------------------------------------------------
 
     print()
     print("Video Analysis")
     print("=" * 50)
 
     for key, value in result.items():
+
         print(
             f"{key}: {value}"
         )

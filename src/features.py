@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import re
 
 
 def create_combined_text(df):
@@ -36,43 +35,66 @@ def create_content_indicators(df):
     """Create binary indicators for explanation content."""
 
     df["has_analogy"] = (
-        df["Analogies"].fillna("").str.strip().str.len() > 0
+        df["Analogies"]
+        .fillna("")
+        .str.strip()
+        .str.len() > 0
     ).astype(int)
 
     df["has_example"] = (
-        df["Examples"].fillna("").str.strip().str.len() > 0
+        df["Examples"]
+        .fillna("")
+        .str.strip()
+        .str.len() > 0
     ).astype(int)
 
     df["has_visual"] = (
-        df["Visuals"].fillna("").str.strip().str.len() > 0
+        df["Visuals"]
+        .fillna("")
+        .str.strip()
+        .str.len() > 0
     ).astype(int)
 
     df["has_application"] = (
-        df["Real_Life"].fillna("").str.strip().str.len() > 0
+        df["Real_Life"]
+        .fillna("")
+        .str.strip()
+        .str.len() > 0
     ).astype(int)
 
-    # Detect mathematical notation / mathematical terms
+    # Detect mathematical notation / mathematical terms.
+    # Non-capturing group (?:...) prevents pandas regex warning.
     math_pattern = (
-        r"\b(math|mathematical|equation|formula|"
+        r"\b(?:math|mathematical|equation|formula|"
         r"calculus|probability|statistics|matrix|vector|"
         r"derivative|integral|algebra|geometry)\b"
     )
 
     df["has_math"] = (
         df["combined_text"]
-        .str.contains(math_pattern, case=False, regex=True, na=False)
+        .str.contains(
+            math_pattern,
+            case=False,
+            regex=True,
+            na=False
+        )
     ).astype(int)
 
-    # Detect programming/code-related content
+    # Detect programming/code-related content.
+    # Non-capturing group (?:...) prevents pandas regex warning.
     code_pattern = (
-        r"\b(code|coding|programming|python|javascript|"
-        r"java|implementation|github|pytorch|tensorflow|"
-        r"implementation)\b"
+        r"\b(?:code|coding|programming|python|javascript|"
+        r"java|implementation|github|pytorch|tensorflow)\b"
     )
 
     df["has_code"] = (
         df["combined_text"]
-        .str.contains(code_pattern, case=False, regex=True, na=False)
+        .str.contains(
+            code_pattern,
+            case=False,
+            regex=True,
+            na=False
+        )
     ).astype(int)
 
     return df
@@ -81,7 +103,9 @@ def create_content_indicators(df):
 def create_text_statistics(df):
     """Create basic text statistics."""
 
-    df["text_length"] = df["combined_text"].str.len()
+    df["text_length"] = (
+        df["combined_text"].str.len()
+    )
 
     df["word_count"] = (
         df["combined_text"]
@@ -96,8 +120,13 @@ def create_log_views(df):
     """Create logarithmic view-count feature."""
 
     if "views_numeric" in df.columns:
-        df["log_views"] = np.log1p(df["views_numeric"])
+
+        df["log_views"] = np.log1p(
+            df["views_numeric"]
+        )
+
     elif "Views" in df.columns:
+
         raise ValueError(
             "views_numeric is missing. "
             "Run preprocessing.py first."
@@ -130,36 +159,59 @@ def create_features(df):
     return df
 
 
-def create_features_from_csv(input_path, output_path=None):
+def create_features_from_csv(
+    input_path,
+    output_path=None
+):
     """
     Load a preprocessed CSV, create features,
     and optionally save the result.
     """
 
-    df = pd.read_csv(input_path)
+    df = pd.read_csv(
+        input_path
+    )
 
-    df = create_features(df)
+    df = create_features(
+        df
+    )
 
     if output_path is not None:
-        df.to_csv(output_path, index=False)
+
+        df.to_csv(
+            output_path,
+            index=False
+        )
 
     return df
 
 
 if __name__ == "__main__":
 
-    input_path = "data/processed/videos_clean.csv"
-    output_path = "data/processed/videos_features.csv"
+    input_path = (
+        "data/processed/videos_clean.csv"
+    )
+
+    output_path = (
+        "data/processed/videos_features.csv"
+    )
 
     df = create_features_from_csv(
         input_path,
         output_path
     )
 
-    print("Feature engineering completed.")
-    print("Shape:", df.shape)
+    print(
+        "Feature engineering completed."
+    )
+
+    print(
+        "Shape:",
+        df.shape
+    )
 
     print("\nNew features:")
+
     print([
         "combined_text",
         "has_analogy",
@@ -174,4 +226,7 @@ if __name__ == "__main__":
     ])
 
     print("\nFeature columns:")
-    print(df.columns.tolist())
+
+    print(
+        df.columns.tolist()
+    )

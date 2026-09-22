@@ -1,11 +1,10 @@
-# Jupyter Notebook Checkpoints (matches any depth)
+# Jupyter Notebook Checkpoints
 **/.ipynb_checkpoints/
 *.ipynb_checkpoints
 
 # Large Data & Embeddings
 *.npy
 *.npz
-data/processed/
 
 # Python
 __pycache__/
